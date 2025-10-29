@@ -1,0 +1,425 @@
+---
+title: "Student Debt Across the USA and how does New College of Florida Students Compare Over Time (2019–2025)"
+author: "Jorge Urbaez"
+output:
+  html_document:
+    theme: simplex
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: hide
+    df_print: kable
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r, warning=FALSE, message=FALSE}
+# Load packages here: 
+library(tidyverse)
+library(ggplot2)
+library(mosaic)
+library(readr)
+library(dplyr)
+
+# Import the data here:
+
+files <- list.files("data", pattern = "\\.csv$", full.names = T)
+
+
+C_2019 <- read_csv(files[1],na = c("-999", "not reported", "", "PS" ) )
+C_2020 <- read_csv(files[2],na = c("-999", "not reported", "", "PS" ) )
+C_2024 <- read_csv(files[3],na = c("-999", "not reported", "", "PS" ) )
+C_2025 <- read_csv(files[4],na = c("-999", "not reported", "", "PS" ) )
+
+
+C_2019 <- C_2019|>
+  mutate(
+    REGION = case_when(
+      REGION == "U.S.S.S" ~ 0, REGION == "U.S" ~ 0,
+      REGION == "NE" ~ 1,      REGION == "ME" ~ 2,
+      REGION == "GL" ~ 3,      REGION == "Plains" ~ 4,
+      REGION == "SE" ~ 5,      REGION == "SW" ~ 6,
+      REGION == "Rockies" ~ 7, REGION == "West" ~ 8,
+      REGION == "Outlying" ~ 9,
+      TRUE ~ NA_real_
+    ),
+    Year = 2019
+  )
+
+C_2024 <- C_2024|>
+  mutate(
+    REGION = case_when(
+      REGION == "U.S.S.S" ~ 0, REGION == "U.S" ~ 0,
+      REGION == "NE" ~ 1,      REGION == "ME" ~ 2,
+      REGION == "GL" ~ 3,      REGION == "Plains" ~ 4,
+      REGION == "SE" ~ 5,      REGION == "SW" ~ 6,
+      REGION == "Rockies" ~ 7, REGION == "West" ~ 8,
+      REGION == "Outlying" ~ 9,
+      TRUE ~ NA_real_
+    ),
+    Year = 2024
+  )
+  
+
+C_2025 <- C_2025|>
+            transform(
+              ADM_RATE = as.numeric(ADM_RATE), 
+              UGDS = as.numeric(UGDS),
+              COSTT4_A = as.numeric(COSTT4_A), 
+              MN_EARN_WNE_P10 = as.numeric(MN_EARN_WNE_P10),
+              MD_EARN_WNE_P10 = as.numeric(MD_EARN_WNE_P10), 
+              MN_EARN_WNE_MALE0_P10 = as.numeric(MN_EARN_WNE_MALE0_P10),
+              MN_EARN_WNE_MALE1_P10 = as.numeric(MN_EARN_WNE_MALE1_P10), 
+              MD_EARN_WNE_P6 = as.numeric(MD_EARN_WNE_P6),
+              MN_EARN_WNE_P6 = as.numeric(MN_EARN_WNE_P6), 
+              MN_EARN_WNE_MALE0_P6 = as.numeric(MN_EARN_WNE_MALE0_P6),
+              MN_EARN_WNE_MALE1_P6 = as.numeric(MN_EARN_WNE_MALE1_P6), 
+              GRAD_DEBT_MDN_SUPP = as.numeric(GRAD_DEBT_MDN_SUPP),
+              RPY_3YR_RT_SUPP = as.numeric(RPY_3YR_RT_SUPP), 
+              LO_INC_RPY_3YR_RT_SUPP = as.numeric(LO_INC_RPY_3YR_RT_SUPP),
+              MD_INC_RPY_3YR_RT_SUPP = as.numeric(MD_INC_RPY_3YR_RT_SUPP),
+              HI_INC_RPY_3YR_RT_SUPP = as.numeric(HI_INC_RPY_3YR_RT_SUPP), 
+              C150_4_POOLED_SUPP = as.numeric(C150_4_POOLED_SUPP),
+              C200_4_POOLED_SUPP = as.numeric(C200_4_POOLED_SUPP),
+              RET_FT4_POOLED_SUPP = as.numeric(RET_FT4_POOLED_SUPP), 
+              TUITIONFEE_OUT = as.numeric(TUITIONFEE_OUT),
+              TUITIONFEE_IN  = as.numeric(TUITIONFEE_IN)
+                      )|>
+  mutate(isNCF = grepl("New College of Florida", INSTNM))
+ 
+
+year <- '2025'
+current_year <- C_2025
+```
+
+## Introduction
+
+This is a rough report looking at college costs and debt. The purpose is
+to explore the College Scorecard data and see what patterns we can find
+for the `r year`
+
+We are especially interested in three questions:
+
+1.  What does the distribution of median student debt look like across
+    all U.S. institutions?\n
+2.  How do costs of attendance vary across regions of the country?\n
+3.  How does New College of Florida compare to other schools in terms of
+    cost, debt, and repayment, and how has this changed over time?
+
+Some of the results will focus on the year `r year`, but we might also
+want to check previous years (2019) to see how things have changed.
+
+### Data Preparation
+
+The data we are working with comes from the College Scorecard, a public
+dataset of U.S. colleges. We are using versions from 2019 on up through
+the current year `r year`. Each file has information on cost of
+attendance, debt, repayment rates, and other metrics. You can access the
+data here: you can access here: <https://collegescorecard.ed.gov/data/>.
+
+There are a few issues to note in this data set. For example, some
+variables use special codes instead of leaving values blank. The
+variable **DEBT_MDN_SUPP**, which is the median debt per institution,
+uses the value -999 to indicate missing data. The variable **COSTT4_A**,
+which is the annual total cost of attendance, uses the phrase "not
+reported" to indicate missing data, which means it may not load as
+numeric. In more recent years (2025 and after), the Scorecard sometimes
+shows values as `"PS"`, meaning *privacy suppressed*. This happens when
+the sample size is too small and the Department of Education does not
+release the true value.
+
+We also need to think about the region variable. Right now, the regions
+are given as abbreviations, but originally they were coded as numbers.
+The table below shows the numeric codes, the abbreviations, and the
+states in each region.
+
+```{r}
+ regions <- tribble(
+  ~Code, ~Region, ~`States`,
+  0, "U.S.S.S", "U.S. Service Schools",
+  1, "NE", "CT, ME, MA, NH, RI, VT",
+  2, "ME", "DE, DC, MD, NJ, NY, PA",
+  3, "GL", "IL, IN, MI, OH, WI",
+  4, "Plains", "IA, KS, MN, MO, NE, ND, SD",
+  5, "SE", "AL, AR, FL, GA, KY, LA, MS, NC, SC, TN, VA, WV",
+  6, "SW", "AZ, NM, OK, TX",
+  7, "Rockies", "CO, ID, MT, UT, WY",
+  8, "West", "AK, CA, HI, NV, OR, WA",
+  9, "Outlying", "AS, FM, GU, MH, MP, PR, PW, VI"
+)
+
+```
+
+`r regions`
+
+We will use the region variable in several sections of the report.
+
+### Results
+
+The results section is broken into 4 sub-sections. First, we look at
+overall median debt across all schools. Then we break the analysis of
+debt down by region, take a closer look at students' abilities to repay
+their debts, and finally we examine at how NCF compares to other
+schools.
+
+
+## Overall median debt across all schools in `r year`
+
+```{r}
+current_year|> 
+  summarise(`Median Debt in (USD)` = median(DEBT_MDN_SUPP, na.rm = TRUE))
+```
+
+### Median Student Debt by Region
+
+```{r}
+current_year|> 
+  group_by(REGION)|>
+  summarise(`Median Student Debt (USD)` = median(DEBT_MDN_SUPP, na.rm = TRUE))|>
+  arrange(desc(`Median Student Debt (USD)`))
+```
+
+### Ability to repay debt
+
+```{r}
+current_year |> 
+  summarise(`Median Debt Repayment Rate` = median(RPY_3YR_RT_SUPP, na.rm = TRUE))
+
+```
+
+### Ability of NCF students to repay their debt compared to students from other institutions
+
+```{r}
+#New College of Florida
+ncf_debt_repay <- current_year |> 
+  filter(isNCF == TRUE) |> 
+  summarise(
+    debt = median(DEBT_MDN_SUPP, na.rm = TRUE),
+    repay = median(RPY_3YR_RT_SUPP, na.rm = TRUE)
+  )
+
+# All other schools
+all_schools_debt_repay <- current_year |> 
+  filter(isNCF == FALSE) |> 
+  summarise(
+    debt = median(DEBT_MDN_SUPP, na.rm = TRUE),
+    repay = median(RPY_3YR_RT_SUPP, na.rm = TRUE)
+  )
+```
+
+New college of Florida student median debt in `r year` was
+`r format(round(ncf_debt_repay$debt, 0), scientific = FALSE)`, a
+`r format(round(ncf_debt_repay$debt - all_schools_debt_repay$debt, 3),  scientific = FALSE)` (USD)
+difference in comparison to other school's debt, and New College of
+Florida students debt repayment rate after 3 years was around
+`r format(round(ncf_debt_repay$repay, 3),  scientific = FALSE)` percentage points, `r format(round(ncf_debt_repay$repay - all_schools_debt_repay$repay, 3),  scientific = FALSE)` percentage points difference compared to Students from other institutions.
+
+One important question when looking at colleges is: how much debt do
+students graduate with? Median student debt is one of the best ways to
+measure this, since it is less sensitive to extreme outliers than the
+mean. This question matters because student debt has long-term
+consequences for graduates and their ability to repay loans, buy homes,
+or continue their education.
+
+We first look at the overall distribution of median debt across all
+schools in the data set. Then we will highlight the median debt for New
+College of Florida (NCF) for comparison.
+
+```{r warning=FALSE}
+ncf_debt <- current_year |> 
+  filter(isNCF == TRUE) |> 
+  summarise(median_debt = median(DEBT_MDN_SUPP, na.rm = TRUE))
+
+
+ggplot(current_year, aes(x=DEBT_MDN_SUPP, y="" ))+
+  
+  geom_boxplot(fill= "lightblue", 
+               color = "black")+
+  geom_point(
+    data = filter(current_year, isNCF == TRUE), 
+    aes(x = DEBT_MDN_SUPP),
+    color = "red"
+  )+
+  geom_text(
+    data = filter(current_year, isNCF == TRUE),
+    aes(x = DEBT_MDN_SUPP, y = "" , label = "New College of Florida"),
+    color = "red",
+    vjust = 1.5
+  )+
+  labs(
+    title = "Distribution of Median Student Debt Across All Schools", 
+    y= "",
+    x = "Median Student Debt (USD)"
+    )+
+  theme_classic()
+
+
+```
+
+The median student debt for NCF in `r year` was `r ncf_debt[[1]]` (USD).
+
+### Numerical summary and histogram
+
+```{r warning=FALSE}
+
+# summary and histogram of DEBT_MDN_SUPP goes here
+
+current_year|>
+  summarise(
+    Min = min(DEBT_MDN_SUPP, na.rm = TRUE),
+    Q1 = quantile(DEBT_MDN_SUPP, 0.25, na.rm = TRUE),
+    Median = median(DEBT_MDN_SUPP, na.rm = TRUE),
+    Q3 = quantile(DEBT_MDN_SUPP, 0.75, na.rm = TRUE),
+    Max = max(DEBT_MDN_SUPP, na.rm = TRUE),
+    Mean = mean(DEBT_MDN_SUPP, na.rm = TRUE),
+    SD = sd(DEBT_MDN_SUPP, na.rm = TRUE),
+    Total = sum(length(DEBT_MDN_SUPP)),
+    Valid = sum(!is.na(DEBT_MDN_SUPP)),
+    Missing = sum(is.na(DEBT_MDN_SUPP))
+  )
+
+ggplot(current_year, aes(x = DEBT_MDN_SUPP))+
+  geom_histogram(fill = "lightblue", color = "black", bins = 22)+
+  labs(
+    title = "Distribution of Median Student Debt Across All Schools",
+    x = " Median Student Debt (USD) ",
+    y = "Number of Schools",
+  )+
+  theme_classic()
+
+```
+
+## Cost by Region in `r year`
+
+Another key question is how the cost of attending college varies
+depending on the region of the country. This is important because
+students often choose schools close to home, and costs can differ widely
+across regions. By comparing costs across regions we can see whether
+some areas consistently have more expensive schools than others. It's
+also useful to consider the sample size and amount of missing data in
+each region.
+
+```{r}
+ncf_COSTT4_A <- current_year|>
+  filter(isNCF == TRUE)|>
+  select(COSTT4_A)
+```
+
+In the `r year` data set, the cost for NCF was `r format(round(ncf_COSTT4_A[[1]] , 3) ,  scientific = FALSE)` (USD).
+This will be used as a reference line in the plot below.
+
+### Boxplot of cost by region
+
+The graph below shows side-by-side boxplots of the total cost of
+attendance for each region. The red line marks NCF's cost for
+comparison.
+
+```{r warning=FALSE}
+# boxplot of COSTT4_A by REGION with a red line for NCF’s cost
+# i decided to turn back into string category, because i think that will make easier for readers to see the comparison without having to add a key to the graph or people having to go up the report it also includes other sections where i prefer to use string key instead of numbers
+
+reg <- current_year|>
+  mutate(
+    REGION = case_when(
+      REGION == 0 ~ "U.S.S.S",
+      REGION == 1 ~ "NE",
+      REGION == 2 ~ "ME",
+      REGION == 3 ~ "GL",
+      REGION == 4 ~ "Plains",
+      REGION == 5 ~ "SE",
+      REGION == 6 ~ "SW",
+      REGION == 7 ~ "Rockies",
+      REGION == 8 ~ "West",
+      REGION == 9 ~ "Outlying",
+      TRUE ~ NA_character_
+    )
+  )
+
+ggplot(reg, aes(x = REGION, y = COSTT4_A))+
+  geom_boxplot(fill= 'lightblue')+
+  geom_hline(yintercept = ncf_COSTT4_A[[1]], color = "red")+
+  labs(
+    title = "Cost of Attendance by Region",
+    x = "Region" ,
+    y = "Cost of Attendance (USD)"
+  )+
+  theme_classic()
+```
+
+### Summary of highest and lowest cost schools
+
+As we can see from the above summaries, the SouthEast (where NCF is
+located) had some of the highest costing colleges, with outliers far
+above the rest of the institutions. However, there's also a great deal
+of variability, with several low-cost colleges as well. It's difficult
+to see from the graph exactly what the most and least expensive colleges
+are, so we'll pull this information out into a separate table.
+
+The schools with the overall highest and lowest cost in `r year` were:
+
+```{r}
+# table showing INSTNM, REGION, COSTT4_A for the min and max schools
+
+COSTT4_A_min_max <- reg|>
+  dplyr::select(
+    Institution = INSTNM, 
+    Region = REGION,
+    `Cost of Attendance` = COSTT4_A
+    )|>
+  filter(
+    `Cost of Attendance`== min(`Cost of Attendance`, na.rm = T) | (`Cost of Attendance` == max(`Cost of Attendance`, na.rm = T))
+    )
+```
+`r COSTT4_A_min_max`
+
+## Comparing Metrics by Region `r year`
+
+It is often useful to compare multiple financial measures side by side,
+to see whether patterns hold across different variables. In particular,
+we might ask whether regions that have higher costs of attendance also
+tend to have higher levels of debt. Here we focus on two regions with
+very different types of institutions: the Southeast (where NCF is
+located) and New England.
+
+This question is interesting because students choosing between schools
+in these regions may want to know whether they are likely to graduate
+with similar levels of debt, or whether cost and debt behave differently
+depending on the region.
+
+From a coding perspective, this section was more challenging, because
+the data had to be restructured so that both cost and debt could be
+displayed on the same plot.
+
+### Side-by-side boxplots of cost and debt in Southeast vs New England
+
+```{r warning=FALSE}
+# create 4 boxplots on the same graph:
+# Median debt and cost of attendance for Southeast and New England regions
+reg_long <- reg |>
+  filter(REGION %in% c("SE", "NE")) |>
+  select(
+    Region = REGION, 
+    `Median Debt` = DEBT_MDN_SUPP, 
+    `Cost of Attendance` = COSTT4_A) |>
+  pivot_longer(
+    cols = c(`Median Debt`, `Cost of Attendance`),
+    names_to = "Var_name",
+    values_to = "Value"
+  )
+
+reg_long|>
+  ggplot(aes(x = Region, y = Value), fill = Region)+
+  geom_boxplot()+
+  facet_wrap(~Var_name)+
+  labs(
+    title = "Median Debt and Cost of Attendance in Southeast vs New England",
+    x = "Region",
+    y = "USD",
+    fill = "Region"
+  )+
+  theme_classic()
+
+```
+
+This concludes the report on college costs and debt.
